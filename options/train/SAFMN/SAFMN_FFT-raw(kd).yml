@@ -1,0 +1,198 @@
+# ------------------------------------------------------------------------
+# Copyright (c) 2022 megvii-model. All Rights Reserved.
+# ------------------------------------------------------------------------
+# Modified from BasicSR (https://github.com/xinntao/BasicSR)
+# Copyright 2018-2020 BasicSR Authors
+# ------------------------------------------------------------------------
+# general settings
+name: SAFMN_FFT_raw_p128b16_kd
+model_type: RealRawSRKDModel
+scale: 2
+num_gpu: 1
+manual_seed: 12345
+
+raw_kernel_path: D:/github/NTIRE2024/raw_kit/kernels.npy
+# ----------------- options for synthesizing training data in RealESRNetModel ----------------- #
+gt_usm: False  # USM the ground-truth
+
+# the first degradation process
+resize_prob: [0.2, 0.7, 0.1]  # up, down, keep
+resize_range: [0.15, 1.5]
+gaussian_noise_prob: 0.5
+noise_range: [1, 30]
+poisson_scale_range: [0.05, 3]
+sr_noise_prob1: 0.5
+gray_noise_prob: 0.4
+sigma_1_range: [!!float 5e-3, !!float 5e-2]
+sigma_2_range: [!!float 1e-3, !!float 1e-2]
+
+# the second degradation process
+second_blur_prob: 0.4
+resize_prob2: [0.3, 0.4, 0.3]  # up, down, keep
+resize_range2: [0.3, 1.2]
+gaussian_noise_prob2: 0.5
+noise_range2: [1, 25]
+poisson_scale_range2: [0.05, 2.5]
+noise_prob2: 0.4
+exposure_prob: 0.5
+psf_apply_prob1: 0.4
+psf_apply_prob2: 0.4
+exposure_compensation_range: [-0.25, 0.25]
+
+
+gt_size: 256
+queue_size: 256
+
+datasets:
+  train:
+    name: DSLR
+    type: RealESRGANRawDataset
+    dataroot_gt: D:/Datasets/DSLR/subimages_new/train
+
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+
+    blur_kernel_size: 25
+    kernel_list: [ 'iso', 'aniso', 'generalized_iso', 'generalized_aniso', 'plateau_iso', 'plateau_aniso' ]
+    kernel_prob: [ 0.45, 0.25, 0.12, 0.03, 0.12, 0.03 ]
+    sinc_prob: 0
+    blur_sigma: [ 0.2, 3 ]
+    betag_range: [ 0.5, 4 ]
+    betap_range: [ 1, 2 ]
+
+    blur_kernel_size2: 25
+    kernel_list2: [ 'iso', 'aniso', 'generalized_iso', 'generalized_aniso', 'plateau_iso', 'plateau_aniso' ]
+    kernel_prob2: [ 0.45, 0.25, 0.12, 0.03, 0.12, 0.03 ]
+    sinc_prob2: 0
+    blur_sigma2: [ 0.2, 1.5 ]
+    betag_range2: [ 0.5, 4 ]
+    betap_range2: [ 1, 2 ]
+
+    final_sinc_prob: 0.8
+
+    gt_size: 256
+    use_hflip: true
+    use_rot: true
+
+    # data loader
+    num_worker_per_gpu: 4
+    batch_size_per_gpu: 16
+    dataset_enlarge_ratio: 1.5
+    prefetch_mode: cuda
+    pin_memory: true
+
+  val:
+    name: DSLR_debug_val
+    type: PairedRawImageDataset
+    dataroot_gt: D:/Datasets/DSLR/subimages_new/debug_gt
+    dataroot_lq: D:/Datasets/DSLR/subimages_new/debug_lq
+    io_backend:
+      type: disk
+
+network_g:
+  type: SAFMN_FFT_S
+  in_chans: 4
+  dim: 36
+  n_blocks: 8
+  ffn_scale: 2.0
+  upscaling_factor: 2
+
+network_t:
+  type: NAFNet_T
+  width: 64
+  enc_blk_nums: [ 2, 2, 4, 8 ]
+  middle_blk_num: 12
+  dec_blk_nums: [ 2, 2, 2, 2 ]
+  img_channel: 4
+  upscale: 2
+  nafb_g: 1
+
+# network_t:
+#  type: HAT
+#  upscale: 2
+#  in_chans: 4
+#  img_size: 64
+#  # rggb_mean: [0.06881331417974806 0.11484029483535026 0.11487233604451544 0.07960238211308024]
+#  # rggb_mean: [0.0688 0.1148 0.1149 0.0796]
+#  window_size: 16
+#  compress_ratio: 24
+#  squeeze_factor: 24
+#  conv_scale: 0.01
+#  overlap_ratio: 0.5
+#  img_range: 1.
+#  depths: [ 6, 6, 6, 6, 6, 6]
+#  embed_dim: 144
+#  num_heads: [ 6, 6, 6, 6, 6, 6]
+#  mlp_ratio: 2
+#  upsampler: 'pixelshuffle'
+#  resi_connection: '1conv'
+
+# path
+path:
+  pretrain_network_g: ~
+  strict_load_g: true
+  resume_state: ~
+  pretrain_network_t: ~  # pretrained teacher
+  strict_load_t: true
+
+# training settings
+train:
+  optim_g:
+    type: AdamW
+    lr: !!float 2e-4
+    weight_decay: 0.
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: CosineAnnealingRestartLR
+    periods: [600000]
+    eta_min: !!float 1e-5
+
+  total_iter: 600000
+  warmup_iter: -1
+
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+  fft_opt:
+    type: FFTLoss
+    loss_weight: 0.05
+    reduction: mean
+  kd_opt:
+    type: CharbonnierLoss
+    loss_weight: 0.1
+    reduction: mean
+
+feature_layers_s: [1, 8]
+feature_layers_t: [1, 8]  # final output img if empty
+
+val:
+ val_freq: !!float 2e4
+ save_img: false
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 4
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 4
+     test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 1000
+  save_checkpoint_freq: !!float 1e4
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+

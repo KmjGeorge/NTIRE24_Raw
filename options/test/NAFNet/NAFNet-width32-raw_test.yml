@@ -1,0 +1,68 @@
+# ------------------------------------------------------------------------
+# Copyright (c) 2022 megvii-model. All Rights Reserved.
+# ------------------------------------------------------------------------
+# Modified from BasicSR (https://github.com/xinntao/BasicSR)
+# Copyright 2018-2020 BasicSR Authors
+# ------------------------------------------------------------------------
+# general settings
+name: NAFNet-DSLR-width32_devtest
+model_type: RealRawSRModel
+scale: 2
+num_gpu: 1
+manual_seed: 12345
+raw_kernel_path: D:/github/NTIRE2024/raw_kit/kernels.npy
+
+datasets:
+  val:
+    name: DSLR
+    type: PairedRawImageDataset
+    dataroot_gt: D:/Datasets/DSLR/subimages/val_gt1024
+    dataroot_lq: D:/Datasets/DSLR/subimages/val_lq512
+    io_backend:
+      type: disk
+
+
+network_g:
+  type: NAFNet
+  width: 32
+  enc_blk_nums: [2, 1]
+  middle_blk_num: 1
+  dec_blk_nums: [2, 1]
+  img_channel: 4
+  upscale: 2
+  nafb_g: 2
+
+# path
+path:
+  pretrain_network_g: D:\\github\\NTIRE2024\\experiments\\pretrained_models\\NAFNet_460000.pth
+  strict_load_g: true
+  resume_state: ~
+
+val:
+ val_freq: !!float 1e4
+ save_img: True
+ suffix: ~
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 4
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 4
+     test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 1000
+  save_checkpoint_freq: !!float 1e4
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+

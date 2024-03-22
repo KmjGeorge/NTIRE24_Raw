@@ -1,0 +1,162 @@
+# ------------------------------------------------------------------------
+# Copyright (c) 2022 megvii-model. All Rights Reserved.
+# ------------------------------------------------------------------------
+# Modified from BasicSR (https://github.com/xinntao/BasicSR)
+# Copyright 2018-2020 BasicSR Authors
+# ------------------------------------------------------------------------
+# general settings
+name: SAFMN_FFT_raw_p128b16
+model_type: RealRawSRModel
+scale: 2
+num_gpu: 1
+manual_seed: 12345
+
+raw_kernel_path: F:/github/NTIRE2024/raw_kit/kernels.npy
+# ----------------- options for synthesizing training data in RealESRNetModel ----------------- #
+gt_usm: False  # USM the ground-truth
+
+# the first degradation process
+resize_prob: [0.2, 0.7, 0.1]  # up, down, keep
+resize_range: [0.15, 1.5]
+gaussian_noise_prob: 0.5
+noise_range: [1, 30]
+poisson_scale_range: [0.05, 3]
+sr_noise_prob1: 0.5
+gray_noise_prob: 0.4
+sigma_1_range: [!!float 5e-3, !!float 5e-2]
+sigma_2_range: [!!float 1e-3, !!float 1e-2]
+
+# the second degradation process
+second_blur_prob: 0.4
+resize_prob2: [0.3, 0.4, 0.3]  # up, down, keep
+resize_range2: [0.3, 1.2]
+gaussian_noise_prob2: 0.5
+noise_range2: [1, 25]
+poisson_scale_range2: [0.05, 2.5]
+noise_prob2: 0.4
+exposure_prob: 0.5
+psf_apply_prob1: 0.4
+psf_apply_prob2: 0.4
+exposure_compensation_range: [-0.25, 0.25]
+
+
+gt_size: 256
+queue_size: 256
+
+datasets:
+  train:
+    name: DSLR
+    type: RealESRGANRawDataset
+    dataroot_gt: D:/Datasets/DSLR/subimages_new/train
+
+    filename_tmpl: '{}'
+    io_backend:
+      type: disk
+
+    blur_kernel_size: 25
+    kernel_list: [ 'iso', 'aniso', 'generalized_iso', 'generalized_aniso', 'plateau_iso', 'plateau_aniso' ]
+    kernel_prob: [ 0.45, 0.25, 0.12, 0.03, 0.12, 0.03 ]
+    sinc_prob: 0
+    blur_sigma: [ 0.2, 3 ]
+    betag_range: [ 0.5, 4 ]
+    betap_range: [ 1, 2 ]
+
+    blur_kernel_size2: 25
+    kernel_list2: [ 'iso', 'aniso', 'generalized_iso', 'generalized_aniso', 'plateau_iso', 'plateau_aniso' ]
+    kernel_prob2: [ 0.45, 0.25, 0.12, 0.03, 0.12, 0.03 ]
+    sinc_prob2: 0
+    blur_sigma2: [ 0.2, 1.5 ]
+    betag_range2: [ 0.5, 4 ]
+    betap_range2: [ 1, 2 ]
+
+    final_sinc_prob: 0.8
+
+    gt_size: 256
+    use_hflip: true
+    use_rot: true
+
+    # data loader
+    num_worker_per_gpu: 1
+    batch_size_per_gpu: 16
+    dataset_enlarge_ratio: 1.5
+    prefetch_mode: cuda
+    pin_memory: true
+
+  val:
+    name: DSLR_newdeg_full
+    type: PairedRawImageDataset
+    dataroot_gt: D:/Datasets/DSLR/subimages_new/debug_gt
+    dataroot_lq: D:/Datasets/DSLR/subimages_new/debug_lq
+    io_backend:
+      type: disk
+
+
+network_g:
+  type: SAFMN_FFT
+  in_chans: 4
+  dim: 36
+  n_blocks: 8
+  ffn_scale: 2.0
+  upscaling_factor: 2
+
+
+# path
+path:
+  pretrain_network_g: ~
+  strict_load_g: true
+  resume_state: ~
+
+# training settings
+train:
+  optim_g:
+    type: AdamW
+    lr: !!float 2e-4
+    weight_decay: 0.
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: MultiStepLR
+    milestones: [300000, 400000, 450000]
+    gamma: 0.5
+  total_iter: 500000
+  warmup_iter: -1
+
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+
+  fft_opt:
+    type: FFTLoss
+    loss_weight: 0.05
+    reduction: mean
+
+val:
+ val_freq: !!float 1e4
+ save_img: false
+ use_pbar: true
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 4
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 4
+     test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 1000
+  save_checkpoint_freq: !!float 1e4
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+

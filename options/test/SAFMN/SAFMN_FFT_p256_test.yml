@@ -1,0 +1,64 @@
+# ------------------------------------------------------------------------
+# Copyright (c) 2022 megvii-model. All Rights Reserved.
+# ------------------------------------------------------------------------
+# Modified from BasicSR (https://github.com/xinntao/BasicSR)
+# Copyright 2018-2020 BasicSR Authors
+# ------------------------------------------------------------------------
+# general settings
+name: SAFMN_FFT_pool_no2blur_p448b2ft_280000_test
+model_type: RealRawSRModel
+scale: 2
+num_gpu: 1
+manual_seed: 12345
+raw_kernel_path: D:/github/NTIRE2024/raw_kit/kernels.npy
+
+datasets:
+  val:
+    name: DSLR_newdeg_full
+    type: PairedRawImageDataset
+    dataroot_gt: D:/Datasets/DSLR/subimages_new/val_gt1024(pool_no2blur)
+    dataroot_lq: D:/Datasets/DSLR/subimages_new/val_lq512(pool_no2blur)
+    io_backend:
+      type: disk
+
+network_g:
+  type: SAFMN_FFT
+  in_chans: 4
+  dim: 36
+  n_blocks: 8
+  ffn_scale: 2.0
+  upscaling_factor: 2
+
+# path
+path:
+  resume_state: ~
+  pretrain_network_g: D:/github/NTIRE2024/experiments/SAFMN_FFT_pool_no2blur_p448b2_ft/models/net_g_280000.pth
+  strict_load_t: true
+
+val:
+ save_img: false
+ suffix: ~
+ metrics:
+   psnr: # metric name
+     type: calculate_psnr
+     crop_border: 4
+     test_y_channel: false
+   ssim:
+     type: calculate_ssim
+     crop_border: 4
+     test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 1000
+  save_checkpoint_freq: !!float 1e4
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+
